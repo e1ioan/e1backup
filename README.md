@@ -24,9 +24,13 @@ or 5:31 in the afternoon would be
 List all the folders you want to backup in format:
 
 Folder1=c:\temp
+
 Folder2=d:\test
+
 Folder3=e:\my-games\doc
+
 Folder4=c:\some-other\
+
 Folder5=e:\more-of-the-same\
 
 Install the service:
