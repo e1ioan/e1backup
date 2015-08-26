@@ -33,7 +33,7 @@ Folder4=c:\some-other\
 
 Folder5=e:\more-of-the-same\
 
-Install the service:
+Install the service
 ----------------------
 
 Start command prompt as administrator and then go to the directory where you have the e1backup.exe:
@@ -46,5 +46,11 @@ and run the following command:
 e1backup.exe /install
 
 Go into your services and start the e1backup service.
+
+
+Note
+------
+
+If in the params.ini you change the Enabled to 0 from 1 in the Amazon section, the backups will be made and just kept locally (you won't need an S3 account).
 
 That's all.
