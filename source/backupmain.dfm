@@ -3,11 +3,6 @@ object E1BackupS: TE1BackupS
   OnCreate = ServiceCreate
   OnDestroy = ServiceDestroy
   AllowPause = False
-  Dependencies = <
-    item
-      Name = 'FirebirdServerDefaultInstance'
-      IsGroup = False
-    end>
   DisplayName = 'E1BackupS'
   OnExecute = ServiceExecute
   OnStart = ServiceStart
