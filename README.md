@@ -39,6 +39,7 @@ Install the service
 Start command prompt as administrator and then go to the directory where you have the e1backup.exe:
 
 d:
+
 cd e1backup
 
 and run the following command:
