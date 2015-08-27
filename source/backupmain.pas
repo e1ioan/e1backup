@@ -27,7 +27,7 @@ type
     FLstBackupFolders: TStringList;
   public
     { Public declarations }
-    function UploadFile(AFileName, ADestination: string): Boolean;
+    function UploadFile(AFileName: string): Boolean;
     function GetServiceController: TServiceController; override;
     procedure ZipFolder(AZipFile: string; AFolder: string);
     procedure Log(s: string);
@@ -40,6 +40,7 @@ implementation
 
 {$R *.DFM}
 uses
+  Web.HTTPApp,
   IniFiles,
   DateUtils,
   IOUtils,
@@ -106,7 +107,7 @@ begin
   end;
 end;
 
-function TE1BackupS.UploadFile(AFileName, ADestination: string): Boolean;
+function TE1BackupS.UploadFile(AFileName: string): Boolean;
 var
   FileContent: TBytes;
   fReader: TBinaryReader;
@@ -126,7 +127,7 @@ begin
   finally
     fReader.Free;
   end;
-  DestinationFileName :=  ADestination + '/' + ExtractFileName(AFileName);
+  DestinationFileName := HTTPEncode(ExtractFileName(AFileName));
   result :=  s3Service.UploadObject(FAmazonBucket, DestinationFileName, FileContent, FALSE);
   finally
     s3Service.Free;
@@ -218,13 +219,14 @@ begin
           tmpstr := StringReplace(FLstBackupFolders.ValueFromIndex[i], '\', '_', [rfReplaceAll]);
           tmpstr := StringReplace(tmpstr, ':', '', [rfReplaceAll]);
 
-          if EndOfTheDay(Today) = EndOfTheMonth(Today) then
+          if EndOfTheDay(Today) = EndOfTheYear(Today) then
+            backupfname := FBackupDestFolder + tmpstr + '-YR' + IntToStr(YearOf(Now)) + '.zip'
+          else if EndOfTheDay(Today) = EndOfTheMonth(Today) then
             backupfname := FBackupDestFolder + tmpstr + '-MT' + IntToStr(MonthOfTheYear(Now)) + '.zip'
+          else if EndOfTheDay(Today) = EndOfTheWeek(Today) then
+            backupfname := FBackupDestFolder + tmpstr + '-WK' + IntToStr(WeekOfTheMonth(Now)) + '.zip'
           else
-            if EndOfTheDay(Today) = EndOfTheWeek(Today) then
-              backupfname := FBackupDestFolder + tmpstr + '-WK' + IntToStr(WeekOfTheMonth(Now)) + '.zip'
-            else
-              backupfname := FBackupDestFolder + tmpstr + '-DL' + IntToStr(DayOfTheWeek(Now)) + '.zip';
+            backupfname := FBackupDestFolder + tmpstr + '-DL' + IntToStr(DayOfTheWeek(Now)) + '.zip';
 
           Log('Current file: ' + ExtractFileName(backupfname));
 
@@ -243,7 +245,7 @@ begin
           if FAmazonEnabled then
           begin
             // TODO : Upload the zip files in a separate thread
-            if UploadFile(backupfname, FormatDateTime('yyyy', Now)) then
+            if UploadFile(backupfname) then
               Log('S3 backup done: '+ ExtractFileName(backupfname));
           end;
         end;
