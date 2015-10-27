@@ -246,7 +246,13 @@ begin
           begin
             // TODO : Upload the zip files in a separate thread
             if UploadFile(backupfname) then
+            begin
               Log('S3 backup done: '+ ExtractFileName(backupfname));
+              // check if file is in use every 20 seconds
+              while IsFileInUse(backupfname) do
+                sleep(20 * MSecsPerSec);
+              SysUtils.DeleteFile(backupfname);
+            end;
           end;
         end;
 
