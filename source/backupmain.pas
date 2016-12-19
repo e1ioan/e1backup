@@ -20,10 +20,10 @@ type
     FAmazonKey: string;
     FAmazonSecret: string;
     FAmazonBucket: string;
+    FStorageEndpoint: string;
     FBackupTime: string;
     FBackupDestFolder: string;
     FAppPath: string;
-
     FLstBackupFolders: TStringList;
   public
     { Public declarations }
@@ -40,7 +40,8 @@ implementation
 
 {$R *.DFM}
 uses
-  Web.HTTPApp,
+  System.NetEncoding,
+  Winapi.ActiveX,
   IniFiles,
   DateUtils,
   IOUtils,
@@ -88,22 +89,27 @@ var
   fName: string;
   I: Integer;
 begin
-  ZipDocument := AZipFile;
-  ZipFile := TZipFile.Create;
   try
-    if FileExists(ZipDocument) then
-      ZipFile.Open(ZipDocument, zmReadWrite)
-    else
-      ZipFile.Open(ZipDocument, zmWrite);
-    for fName in TDirectory.GetFiles(AFolder, '*.*', TSearchOption.soAllDirectories)  do
-    begin
-      ArchiveName := Copy(fName, Length(ExtractFileDrive(fName)) + Length(DriveDelim) + Length(PathDelim) , MAX_PATH);
-      ZipFile.Add(fName, ArchiveName);
-      Sleep(0);
+    ZipDocument := AZipFile;
+    ZipFile := TZipFile.Create;
+    try
+      if FileExists(ZipDocument) then
+        ZipFile.Open(ZipDocument, zmReadWrite)
+      else
+        ZipFile.Open(ZipDocument, zmWrite);
+      for fName in TDirectory.GetFiles(AFolder, '*.*', TSearchOption.soAllDirectories)  do
+      begin
+        ArchiveName := Copy(fName, Length(ExtractFileDrive(fName)) + Length(DriveDelim) + Length(PathDelim) , MAX_PATH);
+        ZipFile.Add(fName, ArchiveName);
+        Sleep(0);
+      end;
+      ZipFile.Close;
+    finally
+      ZipFile.Free;
     end;
-    ZipFile.Close;
-  finally
-    ZipFile.Free;
+  except
+    on e: Exception do
+      Log(e.Message);
   end;
 end;
 
@@ -112,25 +118,50 @@ var
   FileContent: TBytes;
   fReader: TBinaryReader;
   s3Service: TAmazonStorageService;
+  ResponseInfo: TCloudResponseInfo;
   DestinationFileName: string;
+  Response: string;
+  Msg: string;
 begin
+  CoInitialize(nil);
   result := false;
   { AccessKeyID }
   AmazonConnectionInfo1.AccountName := FAmazonKey;
  { SecretAccessKeyID }
   AmazonConnectionInfo1.AccountKey := FAmazonSecret;
+  AmazonConnectionInfo1.StorageEndpoint := FStorageEndpoint;
   s3Service := TAmazonStorageService.Create(AmazonConnectionInfo1);
+  Response := s3Service.ListMultipartUploadsXML(FAmazonBucket, nil);
+  ResponseInfo := TCloudResponseInfo.Create;
   try
-  fReader := TBinaryReader.Create(AFileName);
-  try
-    FileContent := fReader.ReadBytes(fReader.BaseStream.Size);
+    if ContainsText(Response, '<error>') then
+    begin
+      Log(Response);
+      Result := false;
+    end
+    else
+    begin
+      fReader := TBinaryReader.Create(AFileName);
+      try
+        FileContent := fReader.ReadBytes(fReader.BaseStream.Size);
+      finally
+        fReader.Free;
+      end;
+      DestinationFileName := TNetEncoding.URL.Encode(ExtractFileName(AFileName));
+      if s3Service.UploadObject(FAmazonBucket, DestinationFileName, FileContent, false, nil, nil, amzbaPublicRead, ResponseInfo) then
+        Log(DestinationFileName + ' uploaded sucessfully')
+      else
+      begin
+        Msg := 'Error trying to upload + DestinationFileName + into bucket ' + FAmazonBucket + ': ';
+        if ResponseInfo.StatusCode = 404 then
+          Msg := Msg + ' The bucket does not exists ';
+        Log(Msg + ResponseInfo.StatusMessage);
+      end;
+    end;
   finally
-    fReader.Free;
-  end;
-  DestinationFileName := HTTPEncode(ExtractFileName(AFileName));
-  result :=  s3Service.UploadObject(FAmazonBucket, DestinationFileName, FileContent, FALSE);
-  finally
+    ResponseInfo.Free;
     s3Service.Free;
+    CoUninitialize;
   end;
 end;
 
@@ -147,6 +178,7 @@ begin
     FAmazonKey := ReadString('Amazon', 'Key', '');
     FAmazonSecret := ReadString('Amazon', 'Secret', '');
     FAmazonBucket := ReadString('Amazon', 'Bucket', '');
+    FStorageEndpoint := ReadString('Amazon', 'StorageEndpoint', 's3-us-west-2.amazonaws.com');
     FBackupTime := ReadString('Schedule', 'StartTime', '12:00 AM');
     ReadSectionValues('Backup', FLstBackupFolders);
   finally
@@ -229,7 +261,6 @@ begin
             backupfname := FBackupDestFolder + tmpstr + '-DL' + IntToStr(DayOfTheWeek(Now)) + '.zip';
 
           Log('Current file: ' + ExtractFileName(backupfname));
-
           if FileExists(backupfname) then
             SysUtils.DeleteFile(backupfname);
 
